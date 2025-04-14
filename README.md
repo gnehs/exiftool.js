@@ -1,156 +1,188 @@
-exiftool.js
-===========
+# Modern EXIF Parser
 
-A pure javascript implementation of Phil Harvey's excellent [exiftool].
-This extends work started by [Jacob Seidelin] and aims to support parsing
-of all the tags that exiftool is capable of.
-Currently only jpeg is supported.
+[![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-brightgreen.svg)](https://opensource.org/licenses/MPL-2.0)
 
-See how well we're doing in the latest [Coverage report]
+A modern JavaScript EXIF parsing library for reading metadata from JPEG files. This project is a refactoring of the classic [exif-js](https://github.com/exif-js/exif-js/tree/master), adopting ES Modules, `async/await`, Classes, and a clearer code structure for improved maintainability and use in contemporary web development.
 
-The current javascript implementation conforms to the [ECMAScript 5.1]
-which should work in older [node.js] versions.
+## Features
 
-[exiftool]: http://www.sno.phy.queensu.ca/~phil/exiftool/
-[Coverage report]: http://mattburns.github.io/exiftool.js/test/generated/reports/
-[Jacob Seidelin]: http://www.nihilogic.dk/labs/exifjquery/
-[ECMASCript 5.1]: https://www.ecma-international.org/ecma-262/5.1/
-[node.js]: https://nodejs.org
+- **Modern JavaScript:** Built with ES Modules, `async/await`, `const`/`let`, and Classes.
+- **Data-Driven API:** Core API operates on `ArrayBuffer`, returning Promises resolving to EXIF tag objects.
+- **Dependency Free:** No external dependencies like jQuery.
+- **Decoupled from DOM:** Focuses solely on parsing logic, allowing integration into any framework or vanilla JS project.
+- **Modular Structure:** Clear separation into constants, binary reader, parser, and utilities.
+- **Flexible Input:** Helper functions provided for easy parsing from `File` objects, URLs, or Node.js `Buffer`s.
+- **Core Parsing Retained:** Preserves the essential EXIF, TIFF, and GPS tag parsing capabilities of the original `exif-js`.
+- **Basic MakerNote Support:** Includes logic based on `MakeInfo` constants to attempt parsing MakerNotes for common manufacturers (Canon, Nikon, Fujifilm, Olympus, Panasonic, Pentax, Sony, etc.).
 
-Usage
-=====
+## Key Differences from Original exif-js
 
-With jQuery:
+- **Modern API:** Uses ES Module imports and async functions, replacing the global `EXIF` object and jQuery plugins.
+- **No XMP Parsing:** This refactoring focuses exclusively on EXIF data and does not include XMP metadata parsing.
+- **Simplified MakerNote Offset Calculation:** The complex `calculateOffsetBase` logic from the original, particularly relevant for some older or specific cameras (like certain Pentax models), has been simplified. While basic MakerNote parsing works for many cameras, this simplification might affect accuracy for models heavily reliant on that specific calculation.
+- **No jQuery/DOM Integration:** Users are responsible for fetching/reading file data and integrating the parsed results into their application.
+- **Legacy Support Removed:** Dropped support for legacy IE features and built-in Base64 handling.
+- **Node.js Usage:** Requires reading files into a `Buffer` _before_ passing it to the library, rather than the library accessing the filesystem directly.
 
-```js
-$(this).getExifFromUrl(url, function(exif) {
-    console.log("Make is : " + exif["Make"]);
-});
+## Installation
 
+You can install this package directly from its GitHub repository.
+
+```bash
+# Using npm
+npm install github:gnehs/exiftool.js
+# Or specify a branch/tag/commit:
+# npm install github:gnehs/exiftool.js#main
+
+# Using yarn
+yarn add github:gnehs/exiftool.js
+# Or specify a branch/tag/commit:
+# yarn add github:gnehs/exiftool.js#main
+
+# Using pnpm
+pnpm add github:gnehs/exiftool.js
+# Or specify a branch/tag/commit:
+# pnpm add github:gnehs/exiftool.js#main
 ```
 
-Or you can read from a local file (like drag and drop):
+After installation, you can import it using the package name defined in `package.json` (which is currently `@gnehs/exiftool.js`).
 
-```js
-var binaryReader = new FileReader();
-binaryReader.onloadend = function() {
-    var exif = $(this).findEXIFinJPEG(binaryReader.result);
-    console.log("Make is : " + exif["Make"]);
+## Usage Examples
+
+### Browser (from `<input type="file">`)
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Modern EXIF Reader</title>
+  </head>
+  <body>
+    <input type="file" id="fileInput" accept="image/jpeg" />
+    <pre id="output"></pre>
+
+    <script type="module">
+      // Import using the installed package name
+      import exifParser from "@gnehs/exiftool.js";
+
+      const fileInput = document.getElementById("fileInput");
+      const output = document.getElementById("output");
+
+      fileInput.addEventListener("change", async (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          output.textContent = "Processing...";
+          try {
+            // Limit read size for performance (1MB is often enough)
+            const maxBufferSize = 1024 * 1024;
+            const tags = await exifParser.parseFromFile(file, maxBufferSize);
+
+            if (tags) {
+              output.textContent = JSON.stringify(tags, null, 2);
+            } else {
+              output.textContent = "No EXIF data found or error parsing.";
+            }
+          } catch (error) {
+            console.error("Error parsing file:", error);
+            output.textContent = `Error: ${error.message}`;
+          }
+        }
+      });
+    </script>
+  </body>
+</html>
+```
+
+### Browser (from URL)
+
+```javascript
+// Import using the installed package name
+import exifParser from "@gnehs/exiftool.js";
+
+const imageUrl = "https://example.com/image.jpg"; // Replace with your image URL
+const outputElement = document.getElementById("output"); // Assume an element for output
+
+async function parseUrl(url) {
+  outputElement.textContent = "Fetching and processing...";
+  try {
+    // Note: Cross-origin requests require correct CORS headers on the server
+    const tags = await exifParser.parseFromUrl(url);
+
+    if (tags) {
+      outputElement.textContent = JSON.stringify(tags, null, 2);
+    } else {
+      outputElement.textContent =
+        "No EXIF data found or error fetching/parsing.";
+    }
+  } catch (error) {
+    console.error(`Error processing URL ${url}:`, error);
+    outputElement.textContent = `Error: ${error.message}`;
+  }
 }
-binaryReader.readAsBinaryString(file);
 
+parseUrl(imageUrl);
 ```
 
-Or using node.js (exiftool.js is packaged on npm [here](https://www.npmjs.org/package/exiftool.js)):
+### Node.js
 
-```js
-var exiftool = require('exiftool.js');
-var fs = require('fs');
+```javascript
+import { promises as fs } from "fs";
+import path from "path";
+import { fileURLToPath } from "url"; // To get __dirname in ES Modules
 
-exiftool.getExifFromLocalFileUsingNodeFs(fs, imgFile, function(err, exif) {
-    console.log("Make is : " + exif["Make"]);
-});
+// Import using the installed package name
+import exifParser from "@gnehs/exiftool.js";
+
+// Helper to get __dirname in ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+async function readExifNode(filePath) {
+  try {
+    console.log(`Reading file: ${filePath}`);
+    // Read the file into a Buffer
+    const buffer = await fs.readFile(filePath);
+
+    // Optionally limit parsing size for large files
+    const maxBufferSize = 1 * 1024 * 1024; // 1MB
+
+    console.log(`Parsing EXIF from buffer (up to ${maxBufferSize} bytes)...`);
+    const tags = await exifParser.parseFromNodeBuffer(buffer, maxBufferSize);
+
+    if (tags) {
+      console.log("EXIF Data Found:");
+      console.log(JSON.stringify(tags, null, 2));
+      // Example: Access specific tags
+      // console.log("Make:", tags.Make);
+      // console.log("DateTimeOriginal:", tags.DateTimeOriginal);
+    } else {
+      console.log("No EXIF data found or error parsing.");
+    }
+  } catch (error) {
+    console.error(`Error reading or parsing file ${filePath}:`, error);
+  }
+}
+
+// Replace with the path to your JPEG file
+const imagePath = path.join(__dirname, "test", "res", "image.jpg"); // Example path
+readExifNode(imagePath);
 ```
 
-Or for node.js if the image is already in a Buffer:
+## API Overview
 
-```js
-var exiftool = require('exiftool.js');
+The primary export is an object containing the following functions (typically accessed via `exifParser.`):
 
-exiftool.getExifFromNodeBuffer(buffer, function(err, exif) {
-    console.log("Make is : " + exif["Make"]);
-});
-```
+- `parse(arrayBuffer, [maxBufferSize])`: The core parsing function accepting an `ArrayBuffer`. Returns a Promise resolving to the EXIF tags object or `false`.
+- `parseFromFile(file, [maxBufferSize])`: Helper for parsing browser `File` objects.
+- `parseFromUrl(url, [maxBufferSize])`: Helper for parsing from a URL (requires CORS).
+- `parseFromNodeBuffer(nodeBuffer, [maxBufferSize])`: Helper for parsing Node.js `Buffer` objects.
 
+Constants like `Tags`, `TiffTags`, `GPSTags`, `StringValues`, and `MakeInfo` are also exported, which can be useful for interpreting the results or extending functionality.
 
-Coverage
-========
+## Attribution
 
-You can view exactly how the results from this library fair verses the perl library against images from 6,000 different camera models here:
-[Coverage report](http://mattburns.github.io/exiftool.js/test/generated/reports/)
+This code is a refactoring and modernization of [exif-js](https://github.com/exif-js/exif-js/tree/master), originally developed by Jacob Seidelin. Original copyright belongs to Jacob Seidelin.
 
-I see no reason why this library can't match (and exceed!) the parsing capabilities of the orginal perl library but I need your help. Please fork this repo, create pull request and issue, whatever. You can just play with making improvements to the code so that the coverage goes up. 
+## License
 
-Note that all the test files used to be in this repo which means the history is really big. Avoid a large checkout using a `depth` of 1. The test files are now kept in a submodule, so you'll need the `recursive` option.
-
-```sh
-git clone --depth 1 --recursive https://github.com/mattburns/exiftool.js.git
-```
-
-It's easy to see how much your changes are improving this thanks to the coverage report above. To regenerate this simply run:
-
-```sh
-npm install
-npm test
-```
-
-This will thrash every sample image through exiftool.js, and variants of node-exif then generate the report files to compare the output.
-
-
-Alternatively, there's a slower version for the paranoid:
-
-```sh
-npm install
-env exiftoolclean=true npm test
-```
-
-This will do the same thing, but also ensure the json output files generated from the perl exiftool are up to date.
-
-Because we use a submodule, diff your changes using:
-
-```sh
-git diff && git submodule foreach 'git diff'
-```
-
-And push using:
-
-```sh
-git push --recurse-submodules=on-demand
-```
-
-
-Adding more images
-==================
-
-If you want to test some of your own image files, copy them into the sampleImages/_Other directory. Then, if you want to check them in, I have a script (c/o Phil Harvey) that will swap the main image with a small blank white square. This keeps the files small but don't rely on it giving you full anonymity because there may still be thumbnail image data in the file or other personal info in the filesname or other exif tags.
-
-The script is called `swap_image.pl` but to keep things complicated, I suggest you just run the ant script:
-
-```
-ant
-```
-
-
-Releases and automated changelog
-================================
-
-We use the [generate-changelog] tool when releasing new versions.
-This gives us the following goodies:
-- automated CHANGELOG generation
-- automated package version numbering (in `package.json`)
-- new git tag for each release
-
-[generate-changelog]: https://www.npmjs.com/package/generate-changelog
-
-In order to do that, commit messages that should appear in the changelog should
-follow simple formatting rules `type(optional): message`
-(see the [generate-changelog] for further info)
-
-Example:
-```
-fix(issue #36): duplicate declaration in EXIF.TiffTags 0x0132
-```
-
-**NOTE:** Make sure, your git remote is named 'origin' because our script expects it.
-
-## How to use from CLI
-```sh
-# run this to release a new patch version (e.g. 0.3.2 -> 0.3.3)
-yarn release:patch
-
-# run this to release a new minor version (e.g. 0.3.2 -> 0.4.0)
-yarn release:minor
-
-# run this to release a new major version (e.g. 0.3.2 -> 1.0.0)
-yarn release:major
-```
+This project is licensed under the [Mozilla Public License 2.0 (MPL 2.0)](https://opensource.org/licenses/MPL-2.0), consistent with the original `exif-js` license.
