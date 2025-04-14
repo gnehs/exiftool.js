@@ -215,7 +215,7 @@ function readIFD(
   makerNoteHeaderSize = 0
 ) {
   const absoluteDirStart = tiffStartOffset + dirStartOffset;
-  const entryCount = fileReader.getShortAt(
+  let entryCount = fileReader.getShortAt(
     absoluteDirStart + makerNoteHeaderSize,
     isBigEndian
   );
